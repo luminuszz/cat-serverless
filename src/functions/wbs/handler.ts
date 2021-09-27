@@ -3,53 +3,67 @@ import '@libs/inject';
 
 import 'source-map-support/register';
 
-import { container, injectable } from 'tsyringe';
-import { APIGatewayProxyEvent } from 'aws-lambda';
+import { container, inject, injectable } from 'tsyringe';
 import { middyfy } from '@libs/lambda';
 import { browserConnectionFactory } from '@libs/browserConfig';
 
 import { LambadaHandler } from '@libs/HandlerLambda';
 import { formatJSONResponse } from '@libs/apiGateway';
+import { MeTaDataKeys } from '@libs/inject';
+import { Translate } from 'aws-sdk';
 
 @injectable()
 class Handler implements LambadaHandler {
+  private commitUrl = 'http://whatthecommit.com';
+
+  constructor(
+    @inject(MeTaDataKeys.AWS_TRANSLATE)
+    private readonly translateService: Translate,
+  ) {}
+
   private static async getConnection() {
     return browserConnectionFactory();
   }
 
-  private static mountUrlFactory(statusCode: string) {
-    const { URL_PATH } = process.env;
-    return `${URL_PATH}/${statusCode}`;
+  private async translateContent(content: string) {
+    return this.translateService
+      .translateText({
+        SourceLanguageCode: 'en',
+        TargetLanguageCode: 'pt',
+        Text: content,
+      })
+      .promise();
   }
 
-  async main({ queryStringParameters }: APIGatewayProxyEvent) {
-    const { statusCode } = queryStringParameters;
-
-    if (!statusCode) {
-      throw new Error('Not parameters');
-    }
-
-    const url = Handler.mountUrlFactory(statusCode);
-
-    const browser = await Handler.getConnection();
-
+  async main() {
     try {
+      const browser = await Handler.getConnection();
+
       const page = await browser.newPage();
 
-      await page.goto(url, {
+      await page.goto(this.commitUrl, {
         waitUntil: 'networkidle2',
       });
 
-      const img = await page.$eval('img', (img: HTMLImageElement) => img.src);
+      const commitMessage = await page.$eval(
+        'p',
+        (p: HTMLParagraphElement) => p.innerText,
+      );
 
-      return formatJSONResponse({ message: img });
+      const translatedContent = await this.translateContent(commitMessage);
+
+      await browser.close();
+
+      return formatJSONResponse({
+        translatedMessage: translatedContent.TranslatedText,
+        originalMessage: commitMessage,
+      });
     } catch (e) {
+      console.log(e);
       return {
         statusCode: 500,
         body: e.message || 'interval sever error',
       };
-    } finally {
-      await browser.close();
     }
   }
 }

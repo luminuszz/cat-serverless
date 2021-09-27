@@ -29,7 +29,16 @@ const serverlessConfiguration: AWS = {
     environment: {
       AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1',
       URL_PATH: 'https://http.cat',
+      NODE_ENV: 'TEST',
     },
+
+    iamRoleStatements: [
+      {
+        Effect: 'Allow',
+        Action: ['translate:TranslateText'],
+        Resource: '*',
+      },
+    ],
 
     lambdaHashingVersion: '20201221',
   },

@@ -10,6 +10,7 @@ export default {
       http: {
         method: 'get',
         path: 'scrapping',
+        cors: true,
       },
     },
   ],
